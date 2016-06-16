@@ -1,0 +1,445 @@
+<?php
+/**
+ * @file
+ * Provides functionality for hiding form elements from node forms
+ */
+
+/**
+ * Implements hook_permission().
+ *
+ * Provides the permissions needed to use this module.
+ */
+function field_visibility_permission() {
+  return array(
+    "edit field visibility" => array(
+      "title" => t("Edit Field Visibility"),
+      "description" => t("Access the Field Visibility module"),
+      "restrict access" => TRUE,
+    ),
+    "see hidden form fields" => array(
+      "title" => t("See Hidden Form Fields"),
+      "description" => t("Allows users to see form fields that have been hidden."),
+    ),
+  );
+}
+
+
+/**
+ * Implements hook_menu().
+ *
+ * Provides menu endpoints for each page in this module
+ */
+function field_visibility_menu() {
+  // Main page; lists the content types and links to the field visibility settings for each.
+  $items["admin/structure/field_visibility"] = array(
+    "title" => "Field Visibility",
+    "description" => "Show/Hide fields on node forms.",
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('field_visibility_main_form'),
+    'access arguments' => array('edit field visibility'),
+  );
+
+  $items["admin/structure/field_visibility/%"] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('field_visibility_content_type_form', 3),
+    'access arguments' => array('edit field visibility'),
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Checks the visibilities for the content type associated with the node's form.
+ */
+function field_visibility_form_alter(&$form, &$form_state, $form_id) {
+  if (substr($form_id, strlen($form_id) - 9) == "node_form") {
+    // It's a node form; let's grab the front, which will be the content type.
+    $content_type = substr($form_id, 0, strlen($form_id) - 10);
+
+    $visibilities = field_visibility_get_field_visibilities($content_type);
+
+    if (user_access("see hidden form fields")) {
+      // User has full privileges.
+      // @TODO: Configurable message
+      // @TODO: No message.
+      $form["field_visibility_info"] = array(
+        "#type" => "markup",
+        "#markup" => t("<b> @message</b> ", array("@message" => "This form may contain more fields than it does for other users.")),
+      );
+      return;
+    }
+
+    global $user;
+
+    foreach ($visibilities as $field => $roles) {
+      $user_roles = $user->roles;
+      $visible = array_intersect_key($roles, $user_roles);
+
+      if ($visible) {
+        foreach ($visible as $vis) {
+          if ($vis) {
+            $visible = TRUE;
+            break;
+          }
+        }
+
+        if ($visible !== TRUE) {
+          /*
+          This was previously setting #type to 'hidden', but that was causing
+          an issue with revisioning.
+           */
+
+          // Changing #access appears to be the more polite thing to do.
+          $form[$field]["#access"] = FALSE;
+        }
+      }
+    }
+
+  }
+}
+
+/**
+ * Form to edit which fields appear to what roles.
+ */
+function field_visibility_content_type_form($form, &$form_state, $content_type) {
+
+  $node_type = node_type_get_type($content_type);
+  $fields = field_info_instances("node", $content_type);
+
+  $fields = field_visibility_fields_for_content_type($content_type);
+
+  $visibilities = field_visibility_get_field_visibilities($content_type);
+
+  $create_perm = "create $content_type content";
+  $edit_perm = "edit own $content_type content";
+
+  $roles = user_roles(FALSE, $create_perm);
+
+  // Add in the people with edit permissions as well.
+  foreach (user_roles(FALSE, $edit_perm) as $rid => $role) {
+    $roles[$rid] = $role;
+  }
+
+  $form_state["field_visibility_form_roles"] = $roles;
+  $form["message"] = array(
+    "#markup" => "<h3> Chose which fields will be visible to the user, by user role.</h3> ",
+  );
+  $form["checkboxes"] = array(
+    "#prefix" => "<table style ='table-layout:fixed;'> ",
+    "#suffix" => "</table> ",
+  );
+
+  $ind = 0;
+
+  foreach ($fields as $field_name => $field) {
+    $ind += 1;
+    if (isset($visibilities[$field_name])) {
+      $vis = array();
+      foreach ($visibilities[$field_name] as $rid => $visible) {
+        if ($visible == 1) {
+          $vis[] = $rid;
+        }
+      }
+    }
+    else {
+      $vis = array_keys($roles);
+    }
+    // Need to split these up into a group of single checkboxes, and put those
+    // into table columns.
+    $checkboxes = array();
+    $style = $ind % 2 ? "odd" : "even";
+    $form["checkboxes"][$field_name] = array(
+      "#prefix" => "<tr class ='$style'> ",
+      "#suffix" => "</tr> ",
+      "header" => array(
+        "#markup" => t("<th> @name</th> ", array("@name" => $field["name"])),
+      ),
+    );
+
+    foreach ($roles as $rid => $role) {
+      $form["checkboxes"][$field_name]["$field_name:$rid"] = array(
+        "#type" => "checkbox",
+        "#default_value" => in_array($rid, $vis) ? 1 : 0,
+        "#title" => check_plain($role),
+        "#prefix" => "<td> ",
+        "#suffix" => "</td> ",
+      );
+    }
+
+    $form_state["field_visibility_attributes"][] = $field_name;
+  }
+
+  // Set the content type as a value field.
+  $form["field_visibility_content_type"] = array("#type" => "value", "#value" => $content_type);
+  $form["#submit"] = array("field_visibility_content_type_submit");
+  $form["submit"] = array("#type" => "submit", "#value" => "Save");
+
+  drupal_set_title(t("Edit @type Form", array("@type" => $node_type->name)));
+
+  return $form;
+}
+
+
+/**
+ * Form submission handler for the content type form.
+ *
+ * Persists a flag that will hide the field when viewing the content type
+ * form specified.
+ */
+function field_visibility_content_type_submit($form, &$form_state) {
+  $content_type = $form_state["values"]["field_visibility_content_type"];
+
+  // Grab all field visibility records for the given content type.
+
+  // Attributes we're interested in are stored in
+  // $form_state["field_visibility_attributes"], above.
+
+  // Roles we're interested in are stored in
+  // $form_state["field_visibility_form_roles"].
+
+  $roles = $form_state["field_visibility_form_roles"];
+
+  $visibilities = array();
+  foreach ($form_state["field_visibility_attributes"] as $field) {
+
+    foreach ($roles as $rid => $role) {
+      $visibilities[$field][$rid] = $form_state["values"]["$field:$rid"];
+    }
+
+  }
+
+  field_visibility_set_visibilities_for_content_type($content_type, $visibilities);
+
+  $form_state["redirect"] = "admin/structure/field_visibility";
+}
+
+/**
+ * Main form for the module.
+ *
+ * Lists the content types and links to the field visibility settings for each one.
+ */
+function field_visibility_main_form($form, &$form_state) {
+  $content_types = node_type_get_types();
+
+  $form["header"] = array(
+    "#markup" => "<h1> Node Form Editor</h1> ",
+  );
+
+  $types = array();
+
+  foreach ($content_types as $mach_name => $type) {
+    $types[] = array(l($type->name, "admin/structure/field_visibility/$mach_name"));
+  }
+
+  $table = array(
+    "rows" => $types,
+    "attributes" => array(),
+  );
+
+  $table = theme_table($table);
+
+  $form["content_types"] = array(
+    "#markup" => $table,
+  );
+
+  return $form;
+}
+
+
+/*
+  DB Functions
+ */
+
+/**
+ * Retrieves field visibilities.
+ *
+ * By default, gets all of them. If filters are specified, will get them by
+ * content type, field, and roles. Will use the default system for retrieving
+ * them, so arrays will work for each variable.
+ */
+function field_visibility_get_field_visibilities($content_type = NULL, $field = NULL, $roles = NULL) {
+
+  $query = db_select("field_visibility_field_visibility", "vis")->fields("vis");
+
+  if ($content_type !== NULL) {
+    $query = $query->condition("type", $content_type);
+  }
+
+  if ($field !== NULL) {
+    $query = $query->condition("field", $field);
+  }
+
+  if ($roles !== NULL) {
+    $query = $query->condition("role", $roles);
+  }
+
+  $results = $query->execute();
+
+  if ($results) {
+
+    $sorted = array();
+    // Loop over all of the results, and collate them into a
+    // pretty tiered array.
+    while ($row = $results->fetchAssoc()) {
+      $sorted[$row["type"]][$row["field_name"]][$row["role"]] = $row["visibility"];
+    }
+
+    $results = $sorted;
+
+    if ($content_type !== NULL && count($results)) {
+      $results = array_pop($results);
+    }
+
+  }
+  else {
+    return array();
+  }
+
+  return $results;
+}
+
+/**
+ * Sets the visibilities for a content type.
+ *
+ * @param string $content_type
+ *   Content type to set vis for
+ * @param array $visibilities
+ *   field name => array(role => visibility)
+ */
+function field_visibility_set_visibilities_for_content_type($content_type, $visibilities) {
+  $current = field_visibility_get_field_visibilities($content_type);
+
+  $form_fields = array_keys(field_visibility_fields_for_content_type($content_type));
+
+  $insert_fields = array("type", "field_name", "role", "visibility");
+
+  foreach ($visibilities as $field => $vis) {
+    foreach ($vis as $role => $visible) {
+      if (isset($current[$field][$role]) && $visible !== $current[$field][$role]) {
+        // Have to update this row.
+        $condition = db_and()->condition("type", $content_type)->condition("field_name", $field)->condition("role", $role);
+
+        if ($visible == 1) {
+          // Adding row to make_visible.
+          if (!isset($make_visible)) {
+
+            // Lazy initialization; no need to waste time with extra DB chatter.
+            $make_visible = db_update("field_visibility_field_visibility")
+              ->fields(array(
+                "visibility" => 1,
+              )
+            );
+            $vis_update_conditions = db_or();
+          }
+          $vis_update_conditions->condition($condition);
+
+        }
+        else {
+
+          // Adding row to make_invisible.
+          if (!isset($make_invisible)) {
+            // Lazy initialization; no need to waste time with extra DB chatter.
+            $make_invisible = db_update("field_visibility_field_visibility")->fields(array("visibility" => 0));
+            $invis_update_conditions = db_or();
+          }
+
+          $invis_update_conditions->condition($condition);
+        }
+      }
+      else {
+        // New row.
+        $values = array($content_type, $field, $role, $visible);
+
+        if (isset($insert)) {
+          $insert->values($values);
+        }
+        else {
+          // Lazy initialization; no need to waste time with extra DB chatter.
+          // Also saves us from the issue of calling fields the first time,
+          // instead of values.
+          $insert = db_insert("field_visibility_field_visibility");
+          $fields = array_combine($insert_fields, $values);
+          $insert->fields($fields);
+        }
+
+      }
+    }
+  }
+
+  // Only execute queries if initialized.
+
+  if (isset($insert)) {
+    $insert->execute();
+  }
+
+  if (isset($make_visible)) {
+    $make_visible->condition($vis_update_conditions);
+    $make_visible->execute();
+  }
+
+  if (isset($make_invisible)) {
+    $make_invisible->condition($invis_update_conditions);
+    $make_invisible->execute();
+  }
+
+}
+
+/**
+ * Returns an array of all form fields for a given content type.
+ */
+function field_visibility_fields_for_content_type($content_type) {
+
+  // Probably ought to cache these results.
+
+  module_load_include("inc", "node", "node.pages");
+
+  $node_form = node_add($content_type);
+  $node_form_state = array();
+  // Perform necessary alterations.
+  drupal_alter("form", $node_form, $node_form_state, $node_form["#form_id"]);
+
+  $fields = field_info_instances("node", $content_type);
+
+  $form_fields = array();
+  // Should sort by weights of fields, but there's the slight issue
+  // of field groups.
+  // Need to figure out what to do with those.
+  // $form_weights = array();
+  $sortable = array();
+  // Generate the checkboxes for each field and plugin.
+  foreach ($node_form as $attr => $element) {
+
+    if (substr($attr, 0, 1) == "#" || $element["#type"] == "value") {
+      continue;
+    }
+
+    // Is the form element describing a field?
+    if (isset($fields[$attr])) {
+      $type = $fields[$attr]["widget"]["module"];
+      $name = $fields[$attr]["label"];
+    }
+
+    if (isset($element["#title"])) {
+      $type = $element["#type"];
+      $name = $element["#title"];
+    }
+
+    if (isset($name) && isset($type)) {
+      $sortable[$attr] = $name;
+      $form_fields[$attr] = array("name" => $name, "type" => $type);
+      unset($name);
+      unset($type);
+    }
+  }
+
+  natcasesort($sortable);
+  $fields = array();
+
+  foreach ($sortable as $attr => $name) {
+    $fields[$attr] = $form_fields[$attr];
+  }
+
+  return $fields;
+}
