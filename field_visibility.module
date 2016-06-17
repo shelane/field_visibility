@@ -1,7 +1,7 @@
 <?php
 /**
  * @file
- * Provides functionality for hiding form elements from node forms
+ * Provides functionality for hiding form elements from node forms.
  */
 
 /**
@@ -23,11 +23,10 @@ function field_visibility_permission() {
   );
 }
 
-
 /**
  * Implements hook_menu().
  *
- * Provides menu endpoints for each page in this module
+ * Provides menu endpoints for each page in this module.
  */
 function field_visibility_menu() {
   // Main page; lists the content types and links to the field visibility settings for each.
@@ -66,7 +65,9 @@ function field_visibility_form_alter(&$form, &$form_state, $form_id) {
       // @TODO: No message.
       $form["field_visibility_info"] = array(
         "#type" => "markup",
-        "#markup" => t("<b> @message</b> ", array("@message" => "This form may contain more fields than it does for other users.")),
+        "#markup" => t("<b> @message</b> ",
+          array("@message" =>
+            "This form may contain more fields than it does for other users.")),
       );
       return;
     }
@@ -192,13 +193,10 @@ function field_visibility_content_type_submit($form, &$form_state) {
   $content_type = $form_state["values"]["field_visibility_content_type"];
 
   // Grab all field visibility records for the given content type.
-
   // Attributes we're interested in are stored in
   // $form_state["field_visibility_attributes"], above.
-
   // Roles we're interested in are stored in
   // $form_state["field_visibility_form_roles"].
-
   $roles = $form_state["field_visibility_form_roles"];
 
   $visibilities = array();
@@ -218,7 +216,8 @@ function field_visibility_content_type_submit($form, &$form_state) {
 /**
  * Main form for the module.
  *
- * Lists the content types and links to the field visibility settings for each one.
+ * Lists the content types and links to the field visibility settings for each
+ * one.
  */
 function field_visibility_main_form($form, &$form_state) {
   $content_types = node_type_get_types();
@@ -246,7 +245,6 @@ function field_visibility_main_form($form, &$form_state) {
 
   return $form;
 }
-
 
 /*
   DB Functions
@@ -329,8 +327,8 @@ function field_visibility_set_visibilities_for_content_type($content_type, $visi
             $make_visible = db_update("field_visibility_field_visibility")
               ->fields(array(
                 "visibility" => 1,
-              )
-            );
+                )
+              );
             $vis_update_conditions = db_or();
           }
           $vis_update_conditions->condition($condition);
@@ -369,7 +367,6 @@ function field_visibility_set_visibilities_for_content_type($content_type, $visi
   }
 
   // Only execute queries if initialized.
-
   if (isset($insert)) {
     $insert->execute();
   }
@@ -392,7 +389,6 @@ function field_visibility_set_visibilities_for_content_type($content_type, $visi
 function field_visibility_fields_for_content_type($content_type) {
 
   // Probably ought to cache these results.
-
   module_load_include("inc", "node", "node.pages");
 
   $node_form = node_add($content_type);
