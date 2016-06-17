@@ -1,5 +1,4 @@
 name = Node Field Visibility
 description = "Provides a UI for editing role level visibility of fields in Node Forms"
 core = 7.x
-version = 1.0-dev
 package = Node
