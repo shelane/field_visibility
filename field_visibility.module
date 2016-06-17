@@ -29,7 +29,8 @@ function field_visibility_permission() {
  * Provides menu endpoints for each page in this module.
  */
 function field_visibility_menu() {
-  // Main page; lists the content types and links to the field visibility settings for each.
+  // Main page; lists the content types and links to the field visibility
+  // settings for each.
   $items["admin/structure/field_visibility"] = array(
     "title" => "Field Visibility",
     "description" => "Show/Hide fields on node forms.",
@@ -66,8 +67,10 @@ function field_visibility_form_alter(&$form, &$form_state, $form_id) {
       $form["field_visibility_info"] = array(
         "#type" => "markup",
         "#markup" => t("<b> @message</b> ",
-          array("@message" =>
-            "This form may contain more fields than it does for other users.")),
+          array(
+            "@message" =>
+            "This form may contain more fields than it does for other users.")
+          ),
       );
       return;
     }
@@ -182,7 +185,6 @@ function field_visibility_content_type_form($form, &$form_state, $content_type) 
   return $form;
 }
 
-
 /**
  * Form submission handler for the content type form.
  *
@@ -247,7 +249,7 @@ function field_visibility_main_form($form, &$form_state) {
 }
 
 /*
-  DB Functions
+ *DB Functions
  */
 
 /**
@@ -327,7 +329,7 @@ function field_visibility_set_visibilities_for_content_type($content_type, $visi
             $make_visible = db_update("field_visibility_field_visibility")
               ->fields(array(
                 "visibility" => 1,
-                )
+              )
               );
             $vis_update_conditions = db_or();
           }
