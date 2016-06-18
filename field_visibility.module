@@ -69,7 +69,7 @@ function field_visibility_form_alter(&$form, &$form_state, $form_id) {
         "#markup" => t("<b> @message</b> ",
           array(
             "@message" =>
-            "This form may contain more fields than it does for other users."
+            "This form may contain more fields than it does for other users.",
           )
         ),
       );
