@@ -240,7 +240,7 @@ function field_visibility_main_form($form, &$form_state) {
     "attributes" => array(),
   );
 
-  $table = theme_table($table);
+  $table = theme("table", $table);
 
   $form["content_types"] = array(
     "#markup" => $table,
