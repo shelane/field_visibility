@@ -1,9 +1,34 @@
-Provides a method for hiding or displaying fields when editing a node to a user
-based on their role. This works differently than field_access that is an
-"opt-in". This uses an "opt-out" model where all fields are visible by default
-unless turned off for that role. All default or exisiting values of the field
-are maintained.
+============================
+Field Visibility
+============================
 
+Description
+============
+Field Visibility module Provides a method for hiding or displaying fields when
+editing a node to a user based on their role. This works differently than
+field_access that is an "opt-in". This uses an "opt-out" model where all fields
+are visible by default unless turned off for that role. All default or existing
+values of the field are maintained.
+
+Installation
+============
+1. Copy the module in sites/all/module or modules directory and install it.
+2. Configuration settings are found under Admin > Structure > Field Visibility.
+Each content type you have defined in your site will be listed. Select the
+content type whose fields you wish to hide. By default, all fields are selected.
+Uncheck any fields that you don't want that user role to see when editing the
+node type.
+
+Uninstallation
+===============
+1. Disable the module from 'admin >> modules'.
+2. Uninstall the module
+
+
+MAINTAINERS
+============
+Shelane French: https://www.drupal.org/u/shelane
+Justin Shinn: https://www.drupal.org/u/justinshinn
 
 Lawrence Livermore National Laboratory is operated by Lawrence Livermore
 National Security, LLC, for the U.S. Department of Energy, National Nuclear
