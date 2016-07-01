@@ -8,9 +8,9 @@
  * Implements hook_enable().
  */
 function field_visibility_enable() {
-  db_update("system")
-    ->fields(array("weight" => 200))
-    ->condition("name", "field_visibility", " =")
+  db_update('system')
+    ->fields(array('weight' => 200))
+    ->condition('name', 'field_visibility', ' =')
     ->execute();
 }
 
