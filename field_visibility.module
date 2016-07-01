@@ -260,45 +260,11 @@ function field_visibility_main_form($form, &$form_state) {
  * content type, field, and roles. Will use the default system for retrieving
  * them, so arrays will work for each variable.
  */
-function field_visibility_get_field_visibilities($content_type = NULL, $field = NULL, $roles = NULL) {
-
-  $query = db_select("field_visibility_field_visibility", "vis")->fields("vis");
-
+function field_visibility_get_field_visibilities($content_type = NULL) {
   if ($content_type !== NULL) {
-    $query = $query->condition("type", $content_type);
+    return variable_get('field_visibility_node_' . $content_type, array());
   }
-
-  if ($field !== NULL) {
-    $query = $query->condition("field", $field);
-  }
-
-  if ($roles !== NULL) {
-    $query = $query->condition("role", $roles);
-  }
-
-  $results = $query->execute();
-
-  if ($results) {
-
-    $sorted = array();
-    // Loop over all of the results, and collate them into a
-    // pretty tiered array.
-    while ($row = $results->fetchAssoc()) {
-      $sorted[$row["type"]][$row["field_name"]][$row["role"]] = $row["visibility"];
-    }
-
-    $results = $sorted;
-
-    if ($content_type !== NULL && count($results)) {
-      $results = array_pop($results);
-    }
-
-  }
-  else {
-    return array();
-  }
-
-  return $results;
+  return FALSE;
 }
 
 /**
@@ -310,80 +276,7 @@ function field_visibility_get_field_visibilities($content_type = NULL, $field = 
  *   field name => array(role => visibility)
  */
 function field_visibility_set_visibilities_for_content_type($content_type, $visibilities) {
-  $current = field_visibility_get_field_visibilities($content_type);
-
-  $form_fields = array_keys(field_visibility_fields_for_content_type($content_type));
-
-  $insert_fields = array("type", "field_name", "role", "visibility");
-
-  foreach ($visibilities as $field => $vis) {
-    foreach ($vis as $role => $visible) {
-      if (isset($current[$field][$role]) && $visible !== $current[$field][$role]) {
-        // Have to update this row.
-        $condition = db_and()->condition("type", $content_type)->condition("field_name", $field)->condition("role", $role);
-
-        if ($visible == 1) {
-          // Adding row to make_visible.
-          if (!isset($make_visible)) {
-
-            // Lazy initialization; no need to waste time with extra DB chatter.
-            $make_visible = db_update("field_visibility_field_visibility")
-              ->fields(array(
-                "visibility" => 1,
-              )
-              );
-            $vis_update_conditions = db_or();
-          }
-          $vis_update_conditions->condition($condition);
-
-        }
-        else {
-
-          // Adding row to make_invisible.
-          if (!isset($make_invisible)) {
-            // Lazy initialization; no need to waste time with extra DB chatter.
-            $make_invisible = db_update("field_visibility_field_visibility")->fields(array("visibility" => 0));
-            $invis_update_conditions = db_or();
-          }
-
-          $invis_update_conditions->condition($condition);
-        }
-      }
-      else {
-        // New row.
-        $values = array($content_type, $field, $role, $visible);
-
-        if (isset($insert)) {
-          $insert->values($values);
-        }
-        else {
-          // Lazy initialization; no need to waste time with extra DB chatter.
-          // Also saves us from the issue of calling fields the first time,
-          // instead of values.
-          $insert = db_insert("field_visibility_field_visibility");
-          $fields = array_combine($insert_fields, $values);
-          $insert->fields($fields);
-        }
-
-      }
-    }
-  }
-
-  // Only execute queries if initialized.
-  if (isset($insert)) {
-    $insert->execute();
-  }
-
-  if (isset($make_visible)) {
-    $make_visible->condition($vis_update_conditions);
-    $make_visible->execute();
-  }
-
-  if (isset($make_invisible)) {
-    $make_invisible->condition($invis_update_conditions);
-    $make_invisible->execute();
-  }
-
+  variable_set('field_visibility_node_' . $content_type, $visibilities);
 }
 
 /**

@@ -15,58 +15,22 @@ function field_visibility_enable() {
 }
 
 /**
- * Implements hook_schema().
+ * Implements hook_update to convert data in the existing database to an array
+ * which is now stored in variables per content type. When final update
+ * complete, drops the table.
  */
-function field_visibility_schema() {
-  return array(
-    "field_visibility_field_visibility" => array(
-      "description" => "Stores visibility of fields for node add/edit forms per role",
-      "primary key" => array("type", "field_name", "role"),
-      "fields" => array(
-        "type" => array(
-          "description" => "Node Content Type",
-          "type" => "varchar",
-          "size" => "normal",
-          "not null" => TRUE,
-          "length" => 32,
-        ),
-        "field_name" => array(
-          "description" => "Field Name",
-          "type" => "varchar",
-          "size" => "normal",
-          "not null" => TRUE,
-          "length" => 32,
-        ),
-        "role" => array(
-          "description" => "User Role",
-          "type" => "int",
-          "size" => "medium",
-          "unsigned" => TRUE,
-          "not null" => TRUE,
-        ),
-        "visibility" => array(
-          "description" => "Visibility of field",
-          "type" => "int",
-          "size" => "tiny",
-          "not null" => TRUE,
-          "default" => 1,
-          "unsigned" => TRUE,
-        ),
-      ),
-      "foreign keys" => array(
-        "type" => array(
-          "table" => "node_type",
-          "columns" => array("type" => "type"),
-        ),
-        "field_name" => array(
-          "table" => "field_config",
-          "columns" => array("field_name" => "field_name"),
-        ),
-        "role" => array(
-          "table" => "role",
-          "columns" => array("rid" => "rid"),
-        ),
-      ),
-    ),
-  );
+function field_visibility_update_7100() {
+  $export_array = array();
+  $result = db_select('field_visibility_field_visibility', 'c')->fields('c')->execute();
+  foreach ($result as $item) {
+    $type = $item->type;
+    $field_name = $item->field_name;
+    $role = $item->role;
+    $visibility = $item->visibility;
+    $export_array[$type][$field_name][$role] = $visibility;
+  }
+  foreach ($export_array as $key => $value) {
+    variable_set('field_visibility_node_' . $key, $value);
+  }
+  db_drop_table('field_visibility_field_visibility');
 }
