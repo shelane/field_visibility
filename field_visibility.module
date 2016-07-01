@@ -54,15 +54,15 @@ function field_visibility_menu() {
  * Checks the visibilities for the content type associated with the node's form.
  */
 function field_visibility_form_alter(&$form, &$form_state, $form_id) {
-  if (substr($form_id, strlen($form_id) - 9) == "node_form") {
+  if (isset($form['#node_edit_form']) && $form['#node_edit_form']) {
     // It's a node form; let's grab the front, which will be the content type.
-    $content_type = substr($form_id, 0, strlen($form_id) - 10);
+    $content_type = $form['#bundle'];
 
     $visibilities = field_visibility_get_field_visibilities($content_type);
 
     if (user_access("see hidden form fields")) {
       // User has full privileges.
-      // @TODO: Configurable message
+      // @TODO: Configurable message.
       // @TODO: No message.
       $form["field_visibility_info"] = array(
         "#type" => "markup",
