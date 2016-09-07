@@ -54,7 +54,7 @@ function field_visibility_menu() {
  * Checks the visibilities for the content type associated with the node's form.
  */
 function field_visibility_form_alter(&$form, &$form_state, $form_id) {
-  if (isset($form['#node_edit_form']) && $form['#node_edit_form']) {
+  if (isset($form['#node_edit_form']) && $form['#node_edit_form'] == TRUE) {
     // It's a node form; let's grab the front, which will be the content type.
     $content_type = $form['#bundle'];
 
@@ -75,36 +75,48 @@ function field_visibility_form_alter(&$form, &$form_state, $form_id) {
     }
 
     global $user;
+    $user_roles = array_values($user->roles);
 
-    foreach ($visibilities as $field => $roles) {
-      $user_roles = $user->roles;
-      $visible = array_intersect_key($roles, $user_roles);
+    foreach ($visibilities as $field => $role_vis) {
+      $user_set_roles = array_intersect(array_keys($role_vis), $user_roles);
 
-      if ($visible) {
-        foreach ($visible as $vis) {
-          if ($vis) {
+      if (!empty($user_set_roles)) {
+        foreach ($user_set_roles as $ck_role) {
+          $visible = FALSE;
+          if ($role_vis[$ck_role]) {
             $visible = TRUE;
             break;
           }
-        }
-
-        if ($visible !== TRUE) {
-          $form[$field]["#access"] = FALSE;
+          if ($visible !== TRUE) {
+            $form[$field]["#access"] = FALSE;
+          }
         }
       }
+      else {
+        $form[$field]["#access"] = FALSE;
+      }
     }
-
   }
 }
 
 /**
- * Form to edit which fields appear to what roles.
+ * Map human readable role names to a "machine name" for form usage.
+ */
+function field_visibility_form_mapping($roles) {
+  $replace_pattern = '/[^a-z0-9_]+/';
+  $mapping = array();
+  foreach ($roles as $role) {
+    $mapping[$role] = preg_replace($replace_pattern, '_', strtolower($role));
+  }
+  return $mapping;
+}
+
+/**
+ * Form to edit which fields appear to what roles (visibility settings).
  */
 function field_visibility_content_type_form($form, &$form_state, $content_type) {
 
   $node_type = node_type_get_type($content_type);
-  $fields = field_info_instances("node", $content_type);
-
   $fields = field_visibility_fields_for_content_type($content_type);
 
   $visibilities = field_visibility_get_field_visibilities($content_type);
@@ -112,12 +124,17 @@ function field_visibility_content_type_form($form, &$form_state, $content_type) 
   $create_perm = "create $content_type content";
   $edit_perm = "edit own $content_type content";
 
-  $roles = user_roles(FALSE, $create_perm);
+  $roles = array_values(user_roles(FALSE, $create_perm));
 
   // Add in the people with edit permissions as well.
   foreach (user_roles(FALSE, $edit_perm) as $rid => $role) {
-    $roles[$rid] = $role;
+    if (!in_array($role, $roles)) {
+      $roles[] = $role;
+    }
   }
+  natcasesort($roles);
+
+  $machine_roles = field_visibility_form_mapping($roles);
 
   $form_state["field_visibility_form_roles"] = $roles;
   $form["message"] = array(
@@ -128,25 +145,24 @@ function field_visibility_content_type_form($form, &$form_state, $content_type) 
     "#suffix" => "</table> ",
   );
 
-  $ind = 0;
+  $loop_count = 0;
 
   foreach ($fields as $field_name => $field) {
-    $ind += 1;
+    $loop_count += 1;
     if (isset($visibilities[$field_name])) {
-      $vis = array();
-      foreach ($visibilities[$field_name] as $rid => $visible) {
+      $setvis = array();
+      foreach ($visibilities[$field_name] as $role_name => $visible) {
         if ($visible == 1) {
-          $vis[] = $rid;
+          $setvis[] = $role_name;
         }
       }
     }
     else {
-      $vis = array_keys($roles);
+      $setvis = $roles;
     }
-    // Need to split these up into a group of single checkboxes, and put those
-    // into table columns.
+    // Splits into a group of single checkboxes and puts into table columns.
     $checkboxes = array();
-    $style = $ind % 2 ? "odd" : "even";
+    $style = $loop_count % 2 ? "odd" : "even";
     $form["checkboxes"][$field_name] = array(
       "#prefix" => "<tr class ='$style'> ",
       "#suffix" => "</tr> ",
@@ -155,10 +171,11 @@ function field_visibility_content_type_form($form, &$form_state, $content_type) 
       ),
     );
 
-    foreach ($roles as $rid => $role) {
-      $form["checkboxes"][$field_name]["$field_name:$rid"] = array(
+    foreach ($roles as $role) {
+      $form_name = $field_name . ':' . $machine_roles[$role];
+      $form["checkboxes"][$field_name][$form_name] = array(
         "#type" => "checkbox",
-        "#default_value" => in_array($rid, $vis) ? 1 : 0,
+        "#default_value" => in_array($role, $setvis) ? 1 : 0,
         "#title" => check_plain($role),
         "#prefix" => "<td> ",
         "#suffix" => "</td> ",
@@ -193,12 +210,14 @@ function field_visibility_content_type_submit($form, &$form_state) {
   // Roles we're interested in are stored in
   // $form_state["field_visibility_form_roles"].
   $roles = $form_state["field_visibility_form_roles"];
+  $machine_roles = field_visibility_form_mapping($roles);
 
   $visibilities = array();
   foreach ($form_state["field_visibility_attributes"] as $field) {
 
-    foreach ($roles as $rid => $role) {
-      $visibilities[$field][$rid] = $form_state["values"]["$field:$rid"];
+    foreach ($roles as $role) {
+      $form_name = $field . ':' . $machine_roles[$role];
+      $visibilities[$field][$role] = $form_state["values"][$form_name];
     }
 
   }
@@ -209,7 +228,7 @@ function field_visibility_content_type_submit($form, &$form_state) {
 }
 
 /**
- * Main form for the module.
+ * Main form for the module settings.
  *
  * Lists the content types and links to the field visibility settings for each
  * one.
@@ -259,9 +278,9 @@ function field_visibility_get_field_visibilities($content_type = NULL) {
  * Sets the visibilities for a content type.
  *
  * @param string $content_type
- *   Content type to set vis for
+ *   Content type to set vis for.
  * @param array $visibilities
- *   field name => array(role => visibility)
+ *   field name => array(role => visibility).
  */
 function field_visibility_set_visibilities_for_content_type($content_type, $visibilities) {
   variable_set('field_visibility_node_' . $content_type, $visibilities);
