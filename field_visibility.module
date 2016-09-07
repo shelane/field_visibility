@@ -62,11 +62,9 @@ function field_visibility_form_alter(&$form, &$form_state, $form_id) {
 
     if (user_access("see hidden form fields")) {
       // User has full privileges.
-      // @TODO: Configurable message.
-      // @TODO: No message.
       $form["field_visibility_info"] = array(
         "#type" => "markup",
-        "#markup" => t("<b> @message</b> ",
+        "#markup" => t("<b>@message</b>",
           array(
             "@message" =>
             "This form may contain more fields than it does for other users.",
@@ -91,12 +89,6 @@ function field_visibility_form_alter(&$form, &$form_state, $form_id) {
         }
 
         if ($visible !== TRUE) {
-          /*
-          This was previously setting #type to 'hidden', but that was causing
-          an issue with revisioning.
-           */
-
-          // Changing #access appears to be the more polite thing to do.
           $form[$field]["#access"] = FALSE;
         }
       }
@@ -129,7 +121,7 @@ function field_visibility_content_type_form($form, &$form_state, $content_type) 
 
   $form_state["field_visibility_form_roles"] = $roles;
   $form["message"] = array(
-    "#markup" => "<h3> Chose which fields will be visible to the user, by user role.</h3> ",
+    "#markup" => "<h3>Chose which fields will be visible to the user, by user role.</h3> ",
   );
   $form["checkboxes"] = array(
     "#prefix" => "<table style ='table-layout:fixed;'> ",
@@ -159,7 +151,7 @@ function field_visibility_content_type_form($form, &$form_state, $content_type) 
       "#prefix" => "<tr class ='$style'> ",
       "#suffix" => "</tr> ",
       "header" => array(
-        "#markup" => t("<th> @name</th> ", array("@name" => $field["name"])),
+        "#markup" => t("<th>@name</th>", array("@name" => $field["name"])),
       ),
     );
 
@@ -210,8 +202,8 @@ function field_visibility_content_type_submit($form, &$form_state) {
     }
 
   }
-
   field_visibility_set_visibilities_for_content_type($content_type, $visibilities);
+  drupal_set_message(t('Field visibility settings saved'));
 
   $form_state["redirect"] = "admin/structure/field_visibility";
 }
@@ -226,7 +218,7 @@ function field_visibility_main_form($form, &$form_state) {
   $content_types = node_type_get_types();
 
   $form["header"] = array(
-    "#markup" => "<h1> Node Form Editor</h1> ",
+    "#markup" => "<h1>Node Field Visibility Settings - Select Content Type</h1>",
   );
 
   $types = array();
@@ -248,10 +240,6 @@ function field_visibility_main_form($form, &$form_state) {
 
   return $form;
 }
-
-/*
- *DB Functions
- */
 
 /**
  * Retrieves field visibilities.
